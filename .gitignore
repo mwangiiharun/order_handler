@@ -1,0 +1,14 @@
+.idea
+.vscode
+*.out
+
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
