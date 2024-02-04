@@ -53,3 +53,8 @@ Or alernativelly where you can specify the config file
 ``` bash
 go run cmd/server/main.go -config .config.yaml
 ```
+
+``` bash
+export APP_PORT=8080
+docker run -p $APP_PORT:8080 -d your-image
+```
