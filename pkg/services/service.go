@@ -10,6 +10,7 @@ import (
 )
 
 type IService interface {
+	SetName(name string) error
 	setConfig(ctx context.Context) error
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
@@ -24,14 +25,28 @@ type IService interface {
 type ServiceType int
 
 const (
-	Orders ServiceType = iota + 1
-	Products
-	Customers
-	Payments
+	Storage ServiceType = iota + 1
+	Http
 )
 
 func (s ServiceType) String() string {
-	return [...]string{"Orders", "Products", "Customers", "Payments"}[s-1]
+	return [...]string{"Storage", "Http"}[s-1]
+}
+
+func (s ServiceType) MarshalText() ([]byte, error) {
+	return []byte(s.String()), nil
+}
+
+func (s ServiceType) UnmarshalText(text []byte) error {
+	switch string(text) {
+	case "Storage":
+		s = Storage
+	case "Http":
+		s = Http
+	default:
+		return fmt.Errorf("invalid ServiceType: %s", text)
+	}
+	return nil
 }
 
 type ServiceConfig struct {
@@ -87,11 +102,11 @@ func (s *Service) Stop(ctx context.Context) error {
 	return s.store.Close()
 }
 
-func (s *Service) Fetch(r *http.Request, tx context.Context) ([]interface{}, error) {
+func (s *Service) Fetch(r *http.Request, ctx context.Context) ([]interface{}, error) {
 	res, err := s.store.List(&firestorepb.ListDocumentsRequest{
 		Parent:       s.config.Parent,
 		CollectionId: s.config.CollectionId,
-	}, tx)
+	}, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -106,15 +121,16 @@ func (s *Service) Get(r *http.Request, ctx context.Context) (interface{}, error)
 	return res, nil
 }
 
-func (s *Service) Create(r *http.Request, tx context.Context) (interface{}, error) {
+func (s *Service) Create(r *http.Request, ctx context.Context) (interface{}, error) {
 	var fields map[string]*firestorepb.Value
 	fields["name"] = &firestorepb.Value{ValueType: &firestorepb.Value_StringValue{StringValue: "test"}}
-	
+
+	document := &firestorepb.Document{}
+
 	res, err := s.store.Create(&firestorepb.CreateDocumentRequest{
-		Parent: s.config.Parent,
+		Parent:       s.config.Parent,
 		CollectionId: s.config.CollectionId,
-		Document: &firestorepb.Document{
-			
+		Document:     document,
 	}, ctx)
 	if err != nil {
 		return nil, err
@@ -123,15 +139,23 @@ func (s *Service) Create(r *http.Request, tx context.Context) (interface{}, erro
 }
 
 func (s *Service) Update(r *http.Request, tx context.Context) (interface{}, error) {
-	return nil, fmt.Errorf("not implemented")
+	res, err := s.store.Update(&firestorepb.UpdateDocumentRequest{}, tx)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 func (s *Service) Delete(r *http.Request, tx context.Context) error {
-	return fmt.Errorf("not implemented")
+	err := s.store.Delete(&firestorepb.DeleteDocumentRequest{}, tx)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func NewService[T IService](name *string) *T {
-	service := new(T)
-	service.Name = name
-	return service
+func NewService(name string) *Service {
+	return &Service{
+		Name: name,
+	}
 }

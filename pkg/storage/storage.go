@@ -11,3 +11,4 @@ type Storage interface {
 	Connect(ctx context.Context) error
 	Close() error
 }
+

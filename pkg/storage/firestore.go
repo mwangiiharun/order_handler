@@ -10,11 +10,15 @@ import (
 	"google.golang.org/api/option"
 )
 
+type StorageConfig struct {
+	Credentials_file string `yaml:"credentials_file"`
+	Project_id       string `yaml:"project_id"`
+	Database_id      string `yaml:"database_id"`
+}
+
 type Firestore struct {
 	client           *firestore.Client
-	Credentials_file string
-	Project_id       string
-	Database_id      string
+	Config		   *StorageConfig
 }
 
 func (f *Firestore) Close() error {
@@ -22,7 +26,7 @@ func (f *Firestore) Close() error {
 }
 
 func (f *Firestore) Connect(ctx context.Context) error {
-	opt := option.WithCredentialsFile(f.Credentials_file)
+	opt := option.WithCredentialsFile(f.Config.Credentials_file)
 	client, err := firestore.NewClient(ctx, opt)
 	if err != nil {
 		return err
@@ -55,8 +59,8 @@ func (f *Firestore) Get(req *firestorepb.GetDocumentRequest, ctx context.Context
 	return resp, nil
 }
 
-func (f *Firestore) Create(req *firestorepb.GetDocumentRequest, ctx context.Context) (*firestorepb.Document, error) {
-	resp, err := f.client.GetDocument(ctx, req)
+func (f *Firestore) Create(req *firestorepb.CreateDocumentRequest, ctx context.Context) (*firestorepb.Document, error) {
+	resp, err := f.client.CreateDocument(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -80,11 +84,11 @@ func (f *Firestore) Delete(req *firestorepb.DeleteDocumentRequest, ctx context.C
 }
 
 func NewFirestore(ctx context.Context) (*Firestore, error) {
-	credentials_file := ctx.Value("credentials_file").(*string)
-	if credentials_file == nil {
-		return nil, fmt.Errorf("credentials_file is required")
+	config := ctx.Value("storage_config").(*StorageConfig)
+	if config == nil {
+		return nil, fmt.Errorf("storage configuration is required")
 	}
 	return &Firestore{
-		Credentials_file: *credentials_file,
+		Config: config,
 	}, nil
 }
