@@ -17,7 +17,7 @@ func main() {
 	flag.Parse()
 
 	configService := server.NewConfigProvider(*configFlag)
-	config, err := configService.ReadConfig(ctx)
+	config, err := configService.Start(ctx)
 	if err != nil {
 		log.Fatalf("Failed to read config: %v", err)
 	}

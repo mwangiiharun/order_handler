@@ -1,13 +1,16 @@
 package services
 
-import (
-	"github.com/order_handler/pkg/storage"
-)
+import "context"
 
 type OrdersService struct {
-	Name         string
-	Store        *storage.Firestore
-	Parent       string
-	CollectionId string
+	storage *FirestoreService
 	Service
+}
+
+func NewOrdersService(ctx context.Context, config *ServiceConfig) (*OrdersService, error) {
+	return &OrdersService{
+		Service: Service{
+			config: config,
+		},
+	}, nil
 }

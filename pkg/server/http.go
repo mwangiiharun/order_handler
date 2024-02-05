@@ -2,10 +2,10 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/order_handler/pkg/services"
 	"github.com/sirupsen/logrus"
 )
 
@@ -21,8 +21,9 @@ type HttpConfig struct {
 }
 
 type HttpServer struct {
-	log    *logrus.Entry
-	Config *HttpConfig
+	log      *logrus.Entry
+	Config   *HttpConfig
+	services []services.IService
 }
 
 func NewHttpServer(ctx context.Context, config *HttpConfig) (*HttpServer, error) {
@@ -36,14 +37,21 @@ func (hs *HttpServer) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "Hello, World!")
-	})
 
-	hs.log.Info("Starting server on port", hs.Config.Port)
+	
+	for _, service := range hs.services {
+		if service.GetStatus() == services.Running {
+			hs.log.Info("Registering handlers for service ", service.GetName())
+			handlers := service.GetHandlers()
+			for path, handler := range handlers {
+				hs.log.Info("Registering handler for ", path)
+				http.HandleFunc(path, handler)
+			}
+		}
+	}
+
+	hs.log.Info("Starting server on port ", hs.Config.Port)
 	if err := http.ListenAndServe(":"+hs.Config.Port, nil); err != nil {
-		fmt.Printf("Failed to start server: %v\n", err)
 		return err
 	}
 	return nil

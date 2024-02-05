@@ -4,33 +4,20 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-
-	"cloud.google.com/go/firestore/apiv1/firestorepb"
-	"github.com/order_handler/pkg/storage"
 )
-
-type IService interface {
-	SetName(name string) error
-	setConfig(ctx context.Context) error
-	Start(ctx context.Context) error
-	Stop(ctx context.Context) error
-
-	Fetch(r *http.Request, tx context.Context) ([]interface{}, error)
-	Get(r *http.Request, tx context.Context) (interface{}, error)
-	Create(r *http.Request, tx context.Context) (interface{}, error)
-	Update(r *http.Request, tx context.Context) (interface{}, error)
-	Delete(r *http.Request, tx context.Context) error
-}
 
 type ServiceType int
 
 const (
 	Storage ServiceType = iota + 1
-	Http
+	Orders
+	Customers
+	Products
+	Payments
 )
 
 func (s ServiceType) String() string {
-	return [...]string{"Storage", "Http"}[s-1]
+	return [...]string{"Storage", "Orders", "Customers", "Products", "Payments"}[s-1]
 }
 
 func (s ServiceType) MarshalText() ([]byte, error) {
@@ -41,121 +28,95 @@ func (s ServiceType) UnmarshalText(text []byte) error {
 	switch string(text) {
 	case "Storage":
 		s = Storage
-	case "Http":
-		s = Http
+	case "Orders":
+		s = Orders
+	case "Customers":
+		s = Customers
+	case "Products":
+		s = Products
+	case "Payments":
+		s = Payments
 	default:
 		return fmt.Errorf("invalid ServiceType: %s", text)
 	}
 	return nil
 }
 
+type serviceStatus int
+
+const (
+	Stopped serviceStatus = iota + 1
+	Running
+)
+
+type IService interface {
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+
+	GetHandlers() map[string]func(http.ResponseWriter, *http.Request)
+	GetName() string
+	GetStatus() serviceStatus
+}
+
+type KV struct {
+	Key   string
+	Value string
+}
+
 type ServiceConfig struct {
-	Name         string      `yaml:"name"`
-	Type         ServiceType `yaml:"type"`
-	Parent       string      `yaml:"parent"`
-	CollectionId string      `yaml:"collectionId"`
+	Name string      `yaml:"name"`
+	Type ServiceType `yaml:"type"`
+	meta KV
 }
 
 type ServiceConfigs *map[string]ServiceConfig
 
 type Service struct {
-	Name   string
-	type_  ServiceType
-	config *ServiceConfig
-	store  *storage.Firestore
+	config   *ServiceConfig
+	status   serviceStatus
+	handlers map[string]func(http.ResponseWriter, *http.Request)
 }
 
-func (s *Service) setConfig(ctx context.Context) error {
-	configs := ctx.Value("configs").(ServiceConfigs)
-	config, ok := (*configs)[s.Name]
-	if !ok {
-		return fmt.Errorf("Service %s not found", s.Name)
-	}
-	s.config = &config
-	return nil
+func (s *Service) GetName() string {
+	return s.config.Name
+}
+
+func (s *Service) GetStatus() serviceStatus {
+	return s.status
 }
 
 func (s *Service) Start(ctx context.Context) error {
-	err := s.setConfig(ctx)
-	if err != nil {
-		return err
+	if s.config == nil {
+		return fmt.Errorf("service config not found")
 	}
-	s.type_ = s.config.Type
-
-	if ctx.Value("storage") != nil {
-		s.store = ctx.Value("storage").(*storage.Firestore)
-		return nil
-	}
-
-	s.store, err = storage.NewFirestore(ctx)
-	if err != nil {
-		return err
-	}
-	err = s.store.Connect(ctx)
-	if err != nil {
-		return err
-	}
+	s.status = Running
 	return nil
 }
 
 func (s *Service) Stop(ctx context.Context) error {
-	return s.store.Close()
-}
-
-func (s *Service) Fetch(r *http.Request, ctx context.Context) ([]interface{}, error) {
-	res, err := s.store.List(&firestorepb.ListDocumentsRequest{
-		Parent:       s.config.Parent,
-		CollectionId: s.config.CollectionId,
-	}, ctx)
-	if err != nil {
-		return nil, err
+	if s.status == Stopped {
+		return fmt.Errorf("service already stopped")
 	}
-	return res, nil
-}
 
-func (s *Service) Get(r *http.Request, ctx context.Context) (interface{}, error) {
-	res, err := s.store.Get(&firestorepb.GetDocumentRequest{}, ctx)
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-func (s *Service) Create(r *http.Request, ctx context.Context) (interface{}, error) {
-	var fields map[string]*firestorepb.Value
-	fields["name"] = &firestorepb.Value{ValueType: &firestorepb.Value_StringValue{StringValue: "test"}}
-
-	document := &firestorepb.Document{}
-
-	res, err := s.store.Create(&firestorepb.CreateDocumentRequest{
-		Parent:       s.config.Parent,
-		CollectionId: s.config.CollectionId,
-		Document:     document,
-	}, ctx)
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-func (s *Service) Update(r *http.Request, tx context.Context) (interface{}, error) {
-	res, err := s.store.Update(&firestorepb.UpdateDocumentRequest{}, tx)
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-func (s *Service) Delete(r *http.Request, tx context.Context) error {
-	err := s.store.Delete(&firestorepb.DeleteDocumentRequest{}, tx)
-	if err != nil {
-		return err
-	}
+	s.status = Stopped
 	return nil
 }
 
-func NewService(name string) *Service {
-	return &Service{
-		Name: name,
+func (s *Service) GetHandlers() map[string]func(http.ResponseWriter, *http.Request) {
+	return s.handlers
+}
+
+func RegisterServices(ctx context.Context, configs ServiceConfigs) (map[string]IService, error) {
+	services := make(map[string]IService)
+	for name, config := range *configs {
+		switch config.Type {
+		case Storage:
+			services[name] = NewFirestore(ctx, config)
+		case Orders:
+			services[name] = NewOrdersService(ctx, config)
+		default:
+			return nil, fmt.Errorf("invalid service type: %s", config.Type)
+		}
 	}
+	return services, nil
 }

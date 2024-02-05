@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
 
 	firestore "cloud.google.com/go/firestore/apiv1"
 	firestorepb "cloud.google.com/go/firestore/apiv1/firestorepb"
@@ -10,15 +9,15 @@ import (
 	"google.golang.org/api/option"
 )
 
-type StorageConfig struct {
+type FirestoreConfig struct {
 	Credentials_file string `yaml:"credentials_file"`
 	Project_id       string `yaml:"project_id"`
 	Database_id      string `yaml:"database_id"`
 }
 
 type Firestore struct {
-	client           *firestore.Client
-	Config		   *StorageConfig
+	client *firestore.Client
+	Config *FirestoreConfig
 }
 
 func (f *Firestore) Close() error {
@@ -83,11 +82,7 @@ func (f *Firestore) Delete(req *firestorepb.DeleteDocumentRequest, ctx context.C
 	return nil
 }
 
-func NewFirestore(ctx context.Context) (*Firestore, error) {
-	config := ctx.Value("storage_config").(*StorageConfig)
-	if config == nil {
-		return nil, fmt.Errorf("storage configuration is required")
-	}
+func NewFirestore(ctx context.Context, config *FirestoreConfig) (*Firestore, error) {
 	return &Firestore{
 		Config: config,
 	}, nil
