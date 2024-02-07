@@ -34,6 +34,8 @@ func (s *FirestoreService) Start(ctx context.Context) error {
 
 	store, err := storage.NewFirestore(ctx, &storage.FirestoreConfig{
 		Credentials_file: credentials_file,
+		Project_id:       s.config.meta["project_id"],
+		Database_id:      s.config.meta["database_id"],
 	})
 	if err != nil {
 		return err

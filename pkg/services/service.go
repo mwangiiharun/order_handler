@@ -58,15 +58,10 @@ type IService interface {
 	GetStatus() serviceStatus
 }
 
-type KV struct {
-	Key   string
-	Value string
-}
-
 type ServiceConfig struct {
 	Name string      `yaml:"name"`
 	Type ServiceType `yaml:"type"`
-	meta KV
+	meta map[string]string
 }
 
 type ServiceConfigs *map[string]ServiceConfig
@@ -106,17 +101,17 @@ func (s *Service) GetHandlers() map[string]func(http.ResponseWriter, *http.Reque
 	return s.handlers
 }
 
-func RegisterServices(ctx context.Context, configs ServiceConfigs) (map[string]IService, error) {
-	services := make(map[string]IService)
-	for name, config := range *configs {
-		switch config.Type {
-		case Storage:
-			services[name] = NewFirestore(ctx, config)
-		case Orders:
-			services[name] = NewOrdersService(ctx, config)
-		default:
-			return nil, fmt.Errorf("invalid service type: %s", config.Type)
-		}
-	}
-	return services, nil
-}
+// func RegisterServices(ctx context.Context, configs ServiceConfigs) (map[string]IService, error) {
+// 	services := make(map[string]IService)
+// 	for name, config := range *configs {
+// 		switch config.Type {
+// 		case Storage:
+// 			services[name] = NewFirestore(ctx, config)
+// 		case Orders:
+// 			services[name] = NewOrdersService(ctx, config)
+// 		default:
+// 			return nil, fmt.Errorf("invalid service type: %s", config.Type)
+// 		}
+// 	}
+// 	return services, nil
+// }
