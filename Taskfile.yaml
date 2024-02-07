@@ -9,3 +9,7 @@ tasks:
     cmds:
       - go test -coverprofile=coverage.out ./...
       - go tool cover -func=coverage.out
+  nats:
+    desc: Run nats server
+    cmds:
+      - nats-server
